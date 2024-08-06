@@ -133,40 +133,41 @@ impl Instruction {
                 }
             };
 
-            (value($v:expr)) => {
+            (value($v:literal)) => {
                 $v
             };
 
-            (addr($v:expr, $a:ident)) => {{
+            (addr($v:literal, $a:ident)) => {{
                 const _: () = assert_u8_nibble($v);
                 (($v as u16) << 12) | Address::get($a)
             }};
 
-            (xk($v:expr, $x:ident, $k:ident)) => {{
+            (xk($v:literal, $x:ident, $k:ident)) => {{
                 const _: () = assert_u8_nibble($v);
-                (($v as u16) << 12) | ((*$x as u16) << 8) | u8::into(*$k)
+                let k: u16 = u8::into(*$k);
+                (($v as u16) << 12) | ((*$x as u16) << 8) | k
             }};
 
-            (xy($v0:expr, $x:ident, $y:ident, $v1:expr)) => {{
+            (xy($v0:literal, $x:ident, $y:ident, $v1:literal)) => {{
                 const _: () = assert_u8_nibble($v0);
                 const _: () = assert_u8_nibble($v1);
                 $v0 | (Register::value($x) << 8) | (Register::value($y) << 4) | $v1 as u16
             }};
 
-            (xyn($v0:expr, $x:ident, $y:ident, $v1:expr)) => {{
+            (xyn($v0:literal, $x:ident, $y:ident, $v1:expr)) => {{
                 const _: () = assert_u8_nibble($v0);
                 $v0 | (Register::value($x) << 8) | (Register::value($y) << 4) | Nibble::get($v1) as u16
             }};
 
-            (x($v0:expr, $x:ident, $v1:expr)) => {{
+            (x($v0:literal, $x:ident, $v1:expr)) => {{
                 const _: () = assert_u8_nibble($v0);
-                let _: u8 = $v1;
-                ($v0 << 12) | (Register::value($x) << 8) | $v1 as u16
+                let v1: u16 = u8::into($v1);
+                ($v0 << 12) | (Register::value($x) << 8) | v1
             }};
 
             ($($tt:tt)*) => {
                 {
-                    let decode = |_| {
+                    let decode = || {
                         decode!($($tt)*)
                     };
 
@@ -175,21 +176,66 @@ impl Instruction {
             };
         }
 
-        let mut value = 0x0000;
+        let value = 0x0000;
+        let address = Address::new_truncate(0x00);
+        let x = Nibble::new_truncate(((value & 0x0F00) >> 8) as u8);
+        let y = Nibble::new_truncate(((value & 0x00F0) >> 4) as u8);
+        let n = Nibble::new_truncate(value as u8);
+
+        let x = Register::from(x);
+        let y = Register::from(y);
+        let k = (value & 0xFF) as u8;
 
         macro_rules! decode {
-            () => {};
+            () => {
+                None
+            };
 
             (Instruction::$ident:ident => value($value:expr), $($tt:tt)*) => {{
-                Instruction::$ident;
                 if value == $value {
-                    return Instruction::$ident;
+                    return Some(Instruction::$ident);
                 }
 
                 decode!($($tt)*)
             }};
 
-            (Instruction::$ident:ident($($fields:tt)*) => $encoding_ty:ident($($encoding:tt)*), $($tt:tt)*) => {{
+            (Instruction::$ident:ident(a) => addr($v:literal, a), $($tt:tt)*) => {{
+                if (value & 0x80) == ($v << 7) {
+                    return Some(Instruction::$ident(address));
+                }
+
+                decode!($($tt)*)
+            }};
+
+            (Instruction::$ident:ident(x, k) => xk($v:literal, x, k), $($tt:tt)*) => {{
+                if ((value >> 12) & 0xF) == $v {
+                    return Some(Instruction::$ident(x, k));
+                }
+
+                decode!($($tt)*)
+            }};
+
+            (Instruction::$ident:ident(x, y) => xy($v1:literal, x, y, $v2:literal), $($tt:tt)*) => {{
+                if ((value >> 12) & 0xF000) == ($v1 << 12) && (value & 0xF) == $v2 {
+                    return Some(Instruction::$ident(x, y));
+                }
+
+                decode!($($tt)*)
+            }};
+
+            (Instruction::$ident:ident(x) => x($v1:literal, x, $v2:literal), $($tt:tt)*) => {{
+                if ((value >> 12) & 0xF) == $v1 && (value & 0xFF) == $v2 {
+                    return Some(Instruction::$ident(x));
+                }
+
+                decode!($($tt)*)
+            }};
+
+            (Instruction::$ident:ident(x, y, n) => xyn($v1:literal, x, y, n), $($tt:tt)*) => {{
+                if (value & 0xF000) == ($v1 << 12) {
+                    return Some(Instruction::$ident(x, y, n));
+                }
+
                 decode!($($tt)*)
             }};
         }
