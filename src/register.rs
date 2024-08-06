@@ -26,6 +26,12 @@ pub enum Register {
     DT = 17,
 }
 
+impl Register {
+    pub fn value(&self) -> u16 {
+        *self as u16
+    }
+}
+
 impl From<Register> for usize {
     fn from(value: Register) -> Self {
         value as usize

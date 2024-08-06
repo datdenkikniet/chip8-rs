@@ -125,7 +125,7 @@ impl Instruction {
         }
 
         macro_rules! encode {
-            (do_impl: $($pat:pat => $encoding_ty:ident($($encoding:tt)*),)*) => {
+            (encode_pats: $($pat:pat => $encoding_ty:ident($($encoding:tt)*),)*) => {
                 match self {
                     $(
                         $pat => encode!($encoding_ty($($encoding)*)),
@@ -139,80 +139,59 @@ impl Instruction {
 
             (addr($v:expr, $a:ident)) => {{
                 const _: () = assert_u8_nibble($v);
-                let _: &Address = $a;
-
-                (($v as u16) << 12) | $a.get()
+                (($v as u16) << 12) | Address::get($a)
             }};
 
             (xk($v:expr, $x:ident, $k:ident)) => {{
                 const _: () = assert_u8_nibble($v);
-                let _: &Register = $x;
-                let _: &u8 = $k;
-
-                (($v as u16) << 12) | ((*$x as u16) << 8) | *$k as u16
+                (($v as u16) << 12) | ((*$x as u16) << 8) | u8::into(*$k)
             }};
 
             (xy($v0:expr, $x:ident, $y:ident, $v1:expr)) => {{
                 const _: () = assert_u8_nibble($v0);
                 const _: () = assert_u8_nibble($v1);
-                let _: &Register = $x;
-                let _: &Register = $y;
-
-                $v0 | ((*$x as u16) << 8) | ((*$y as u16) << 4) | $v1 as u16
+                $v0 | (Register::value($x) << 8) | (Register::value($y) << 4) | $v1 as u16
             }};
 
             (xyn($v0:expr, $x:ident, $y:ident, $v1:expr)) => {{
                 const _: () = assert_u8_nibble($v0);
-                fn nibble(_: Nibble) {}
-                nibble(*$v1);
-                let _: &Register = $x;
-                let _: &Register = $y;
-
-                $v0 | ((*$x as u16) << 8) | ((*$y as u16) << 4) | $v1.get() as u16
+                $v0 | (Register::value($x) << 8) | (Register::value($y) << 4) | Nibble::get($v1) as u16
             }};
 
             (x($v0:expr, $x:ident, $v1:expr)) => {{
                 const _: () = assert_u8_nibble($v0);
-                let _: &Register = $x;
                 let _: u8 = $v1;
-                ($v0 << 12) | (*$x as u16) << 8 | $v1 as u16
+                ($v0 << 12) | (Register::value($x) << 8) | $v1 as u16
             }};
 
             ($($tt:tt)*) => {
                 {
-                    decode!($($tt)*);
-                    encode!(do_impl: $($tt)*)
+                    let decode = |_| {
+                        decode!($($tt)*)
+                    };
+
+                    encode!(encode_pats: $($tt)*)
                 }
             };
         }
 
+        let mut value = 0x0000;
+
         macro_rules! decode {
             () => {};
 
-            (Instruction::$ident:ident => $encoding_ty:ident($($encoding:tt)*), $($tt:tt)*) => {
+            (Instruction::$ident:ident => value($value:expr), $($tt:tt)*) => {{
                 Instruction::$ident;
+                if value == $value {
+                    return Instruction::$ident;
+                }
+
                 decode!($($tt)*)
-            };
-            (Instruction::$ident:ident(a) => $encoding_ty:ident($($encoding:tt)*), $($tt:tt)*) => {
-                Instruction::$ident(todo!());
+            }};
+
+            (Instruction::$ident:ident($($fields:tt)*) => $encoding_ty:ident($($encoding:tt)*), $($tt:tt)*) => {{
                 decode!($($tt)*)
-            };
-            (Instruction::$ident:ident(x, k) => $encoding_ty:ident($($encoding:tt)*), $($tt:tt)*) => {
-                Instruction::$ident(todo!(), todo!());
-                decode!($($tt)*)
-            };
-            (Instruction::$ident:ident(x, y) => $encoding_ty:ident($($encoding:tt)*), $($tt:tt)*) => {
-                Instruction::$ident(todo!(), todo!());
-                decode!($($tt)*)
-            };
-            (Instruction::$ident:ident(x) => $encoding_ty:ident($($encoding:tt)*), $($tt:tt)*) => {
-                Instruction::$ident(todo!());
-                decode!($($tt)*)
-            };
-            (Instruction::$ident:ident(x, y, n) => $encoding_ty:ident($($encoding:tt)*), $($tt:tt)*) => {
-                Instruction::$ident(todo!(), todo!(), todo!());
-                decode!($($tt)*)
-            };
+            }};
         }
 
         let value = encode! {
