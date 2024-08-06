@@ -4,12 +4,12 @@ mod memory;
 mod register;
 
 pub use display::{Display, DisplayCoordinate};
-pub use instruction::Address;
-pub use instruction::Instruction;
+pub use instruction::{Address, Instruction, Nibble};
 pub use memory::Memory;
+pub use register::Register;
 
 use rand::Rng;
-use register::{Register, RegisterFile};
+use register::RegisterFile;
 
 #[derive(Debug, PartialEq)]
 pub enum Error {

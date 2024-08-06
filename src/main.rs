@@ -1,10 +1,26 @@
 use std::{cell::RefCell, io::Read};
 
-use chip8_rs::{Address, Chip8, Display, DisplayCoordinate, Error, Instruction};
+use chip8_rs::{Address, Chip8, Display, DisplayCoordinate, Error, Instruction, Nibble};
 
 fn main() {
     if std::env::args().count() == 1 {
-        let instr = &[0xA0, 0x05, 0xD0, 0x05, 0xA0, 0x00, 0xD0, 0x05, 0x00, 0xFD];
+        use chip8_rs::Register::*;
+        use Instruction::*;
+
+        const FIVE: Nibble = Nibble::new_truncate(5);
+
+        let instr: Vec<_> = [
+            LdI(Address::new_truncate(0 * 5)),
+            Drw(V0, V0, FIVE),
+            LdI(Address::new_truncate(1 * 5)),
+            LdVal(V0, 8),
+            Drw(V0, V1, FIVE),
+            Exit,
+        ]
+        .into_iter()
+        .flat_map(|v| v.encode().to_be_bytes())
+        .collect();
+
         exec(&instr[..]);
     } else {
         for path in std::env::args().skip(1) {

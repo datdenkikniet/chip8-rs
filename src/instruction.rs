@@ -56,7 +56,7 @@ impl std::fmt::Display for Address {
 pub struct Nibble(u8);
 
 impl Nibble {
-    pub fn new(value: u8) -> Option<Self> {
+    pub const fn new(value: u8) -> Option<Self> {
         if value > 0xF {
             None
         } else {
@@ -64,7 +64,11 @@ impl Nibble {
         }
     }
 
-    pub fn get(&self) -> u8 {
+    pub const fn new_truncate(value: u8) -> Self {
+        Self(value & 0xF)
+    }
+
+    pub const fn get(&self) -> u8 {
         self.0
     }
 }
@@ -112,6 +116,108 @@ pub enum Instruction {
 }
 
 impl Instruction {
+    pub fn encode(&self) -> u16 {
+        let mut x_out = None;
+        let mut y_out = None;
+        let mut k_out = None;
+        let mut addr_out = None;
+
+        macro_rules! encode {
+            (addr($a:ident), $v:expr) => {{
+                addr_out = Some($a);
+                $v
+            }};
+
+            (xk($x:ident, $k:ident), $v:expr) => {{
+                x_out = Some($x);
+                k_out = Some($k);
+                $v
+            }};
+
+            (xy($x:ident, $y:ident), $v:expr) => {{
+                x_out = Some($x);
+                y_out = Some($y);
+                $v
+            }};
+
+            (x($x:ident), $v:expr) => {{
+                x_out = Some($x);
+                $v
+            }};
+        }
+
+        let mut base: u16 = match self {
+            Instruction::Sys(a) => encode!(addr(a), 0x0000),
+            Instruction::Cls => 0x00E0,
+            Instruction::Ret => 0x00EE,
+            Instruction::Jp(a) => encode!(addr(a), 0x1000),
+            Instruction::Call(a) => encode!(addr(a), 0x2000),
+            Instruction::SeVal(x, k) => encode!(xk(x, k), 0x3000),
+            Instruction::SneVal(x, k) => encode!(xk(x, k), 0x4000),
+            Instruction::SeReg(x, y) => encode!(xy(x, y), 0x5000),
+            Instruction::LdVal(x, k) => encode!(xk(x, k), 0x6000),
+            Instruction::AddVal(x, k) => encode!(xk(x, k), 0x7000),
+            Instruction::LdReg(x, y) => encode!(xy(x, y), 0x8000),
+            Instruction::Or(x, y) => encode!(xy(x, y), 0x8001),
+            Instruction::And(y, x) => encode!(xy(x, y), 0x8002),
+            Instruction::Xor(x, y) => encode!(xy(x, y), 0x8003),
+            Instruction::AddReg(x, y) => encode!(xy(x, y), 0x8004),
+            Instruction::Sub(x, y) => encode!(xy(x, y), 0x8005),
+            Instruction::Shr(x, y) => encode!(xy(x, y), 0x8006),
+            Instruction::Subn(x, y) => encode!(xy(x, y), 0x8007),
+            Instruction::Shl(x, y) => encode!(xy(x, y), 0x800E),
+            Instruction::SneReg(x, y) => encode!(xy(x, y), 0x9000),
+            Instruction::LdI(a) => encode!(addr(a), 0xA000),
+            Instruction::JpOffset(a) => encode!(addr(a), 0xB000),
+            Instruction::Rnd(x, k) => encode!(xk(x, k), 0xC000),
+            Instruction::Drw(x, y, n) => {
+                x_out = Some(x);
+                y_out = Some(y);
+                0xD000 | n.get() as u16
+            }
+            Instruction::Skp(x) => encode!(x(x), 0xE09E),
+            Instruction::Sknp(x) => encode!(x(x), 0xE0A1),
+            Instruction::LdDtToReg(x) => encode!(x(x), 0xF007),
+            Instruction::LdKey(x) => encode!(x(x), 0xF00A),
+            Instruction::LdDt(x) => encode!(x(x), 0xF00A),
+            Instruction::LdSt(x) => encode!(x(x), 0xF018),
+            Instruction::AddI(x) => encode!(x(x), 0xF01E),
+            Instruction::LdF(x) => encode!(x(x), 0xF029),
+            Instruction::LdB(x) => encode!(x(x), 0xF033),
+            Instruction::LdContToMem(x) => encode!(x(x), 0xF055),
+            Instruction::LdContFromMem(x) => encode!(x(x), 0xF065),
+            Instruction::Exit => 0x00FD,
+        };
+
+        if let Some(x) = x_out {
+            debug_assert!(addr_out.is_none());
+            base |= (*x as u16) << 8;
+        }
+
+        if let Some(y) = y_out {
+            debug_assert!(k_out.is_none());
+            debug_assert!(addr_out.is_none());
+
+            base |= (*y as u16) << 4;
+        }
+
+        if let Some(addr) = addr_out {
+            debug_assert!(y_out.is_none());
+            debug_assert!(x_out.is_none());
+            debug_assert!(k_out.is_none());
+            base |= addr.get() & 0xFFF;
+        }
+
+        if let Some(k_out) = k_out {
+            debug_assert!(y_out.is_none());
+            base |= *k_out as u16;
+        }
+
+        debug_assert_eq!(self, &Self::decode(base).unwrap());
+
+        base
+    }
+
     pub fn decode(instr_val: u16) -> Option<Self> {
         let addr = Address::new(instr_val & 0xFFF).unwrap();
 
