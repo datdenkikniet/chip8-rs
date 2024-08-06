@@ -117,112 +117,153 @@ pub enum Instruction {
 
 impl Instruction {
     pub fn encode(&self) -> u16 {
-        let mut x_out = None;
-        let mut y_out = None;
-        let mut k_out = None;
-        let mut addr_out = None;
+        #[allow(dead_code)]
+        const fn assert_u8_nibble(value: u8) {
+            if Nibble::new(value).is_none() {
+                panic!("Value must be a nibble");
+            }
+        }
 
         macro_rules! encode {
-            (addr($a:ident), $v:expr) => {{
-                addr_out = Some($a);
+            (do_impl: $($pat:pat => $encoding_ty:ident($($encoding:tt)*),)*) => {
+                match self {
+                    $(
+                        $pat => encode!($encoding_ty($($encoding)*)),
+                    )*
+                }
+            };
+
+            (value($v:expr)) => {
                 $v
+            };
+
+            (addr($v:expr, $a:ident)) => {{
+                const _: () = assert_u8_nibble($v);
+                let _: &Address = $a;
+
+                (($v as u16) << 12) | $a.get()
             }};
 
-            (xk($x:ident, $k:ident), $v:expr) => {{
-                x_out = Some($x);
-                k_out = Some($k);
-                $v
+            (xk($v:expr, $x:ident, $k:ident)) => {{
+                const _: () = assert_u8_nibble($v);
+                let _: &Register = $x;
+                let _: &u8 = $k;
+
+                (($v as u16) << 12) | ((*$x as u16) << 8) | *$k as u16
             }};
 
-            (xy($x:ident, $y:ident), $v:expr) => {{
-                x_out = Some($x);
-                y_out = Some($y);
-                $v
+            (xy($v0:expr, $x:ident, $y:ident, $v1:expr)) => {{
+                const _: () = assert_u8_nibble($v0);
+                const _: () = assert_u8_nibble($v1);
+                let _: &Register = $x;
+                let _: &Register = $y;
+
+                $v0 | ((*$x as u16) << 8) | ((*$y as u16) << 4) | $v1 as u16
             }};
 
-            (x($x:ident), $v:expr) => {{
-                x_out = Some($x);
-                $v
+            (xyn($v0:expr, $x:ident, $y:ident, $v1:expr)) => {{
+                const _: () = assert_u8_nibble($v0);
+                fn nibble(_: Nibble) {}
+                nibble(*$v1);
+                let _: &Register = $x;
+                let _: &Register = $y;
+
+                $v0 | ((*$x as u16) << 8) | ((*$y as u16) << 4) | $v1.get() as u16
             }};
+
+            (x($v0:expr, $x:ident, $v1:expr)) => {{
+                const _: () = assert_u8_nibble($v0);
+                let _: &Register = $x;
+                let _: u8 = $v1;
+                ($v0 << 12) | (*$x as u16) << 8 | $v1 as u16
+            }};
+
+            ($($tt:tt)*) => {
+                {
+                    decode!($($tt)*);
+                    encode!(do_impl: $($tt)*)
+                }
+            };
         }
 
-        let mut base: u16 = match self {
-            Instruction::Sys(a) => encode!(addr(a), 0x0000),
-            Instruction::Cls => 0x00E0,
-            Instruction::Ret => 0x00EE,
-            Instruction::Jp(a) => encode!(addr(a), 0x1000),
-            Instruction::Call(a) => encode!(addr(a), 0x2000),
-            Instruction::SeVal(x, k) => encode!(xk(x, k), 0x3000),
-            Instruction::SneVal(x, k) => encode!(xk(x, k), 0x4000),
-            Instruction::SeReg(x, y) => encode!(xy(x, y), 0x5000),
-            Instruction::LdVal(x, k) => encode!(xk(x, k), 0x6000),
-            Instruction::AddVal(x, k) => encode!(xk(x, k), 0x7000),
-            Instruction::LdReg(x, y) => encode!(xy(x, y), 0x8000),
-            Instruction::Or(x, y) => encode!(xy(x, y), 0x8001),
-            Instruction::And(y, x) => encode!(xy(x, y), 0x8002),
-            Instruction::Xor(x, y) => encode!(xy(x, y), 0x8003),
-            Instruction::AddReg(x, y) => encode!(xy(x, y), 0x8004),
-            Instruction::Sub(x, y) => encode!(xy(x, y), 0x8005),
-            Instruction::Shr(x, y) => encode!(xy(x, y), 0x8006),
-            Instruction::Subn(x, y) => encode!(xy(x, y), 0x8007),
-            Instruction::Shl(x, y) => encode!(xy(x, y), 0x800E),
-            Instruction::SneReg(x, y) => encode!(xy(x, y), 0x9000),
-            Instruction::LdI(a) => encode!(addr(a), 0xA000),
-            Instruction::JpOffset(a) => encode!(addr(a), 0xB000),
-            Instruction::Rnd(x, k) => encode!(xk(x, k), 0xC000),
-            Instruction::Drw(x, y, n) => {
-                x_out = Some(x);
-                y_out = Some(y);
-                0xD000 | n.get() as u16
-            }
-            Instruction::Skp(x) => encode!(x(x), 0xE09E),
-            Instruction::Sknp(x) => encode!(x(x), 0xE0A1),
-            Instruction::LdDtToReg(x) => encode!(x(x), 0xF007),
-            Instruction::LdKey(x) => encode!(x(x), 0xF00A),
-            Instruction::LdDt(x) => encode!(x(x), 0xF00A),
-            Instruction::LdSt(x) => encode!(x(x), 0xF018),
-            Instruction::AddI(x) => encode!(x(x), 0xF01E),
-            Instruction::LdF(x) => encode!(x(x), 0xF029),
-            Instruction::LdB(x) => encode!(x(x), 0xF033),
-            Instruction::LdContToMem(x) => encode!(x(x), 0xF055),
-            Instruction::LdContFromMem(x) => encode!(x(x), 0xF065),
-            Instruction::Exit => 0x00FD,
+        macro_rules! decode {
+            () => {};
+
+            (Instruction::$ident:ident => $encoding_ty:ident($($encoding:tt)*), $($tt:tt)*) => {
+                Instruction::$ident;
+                decode!($($tt)*)
+            };
+            (Instruction::$ident:ident(a) => $encoding_ty:ident($($encoding:tt)*), $($tt:tt)*) => {
+                Instruction::$ident(todo!());
+                decode!($($tt)*)
+            };
+            (Instruction::$ident:ident(x, k) => $encoding_ty:ident($($encoding:tt)*), $($tt:tt)*) => {
+                Instruction::$ident(todo!(), todo!());
+                decode!($($tt)*)
+            };
+            (Instruction::$ident:ident(x, y) => $encoding_ty:ident($($encoding:tt)*), $($tt:tt)*) => {
+                Instruction::$ident(todo!(), todo!());
+                decode!($($tt)*)
+            };
+            (Instruction::$ident:ident(x) => $encoding_ty:ident($($encoding:tt)*), $($tt:tt)*) => {
+                Instruction::$ident(todo!());
+                decode!($($tt)*)
+            };
+            (Instruction::$ident:ident(x, y, n) => $encoding_ty:ident($($encoding:tt)*), $($tt:tt)*) => {
+                Instruction::$ident(todo!(), todo!(), todo!());
+                decode!($($tt)*)
+            };
+        }
+
+        let value = encode! {
+            Instruction::Cls => value(0x00E0),
+            Instruction::Ret => value(0x00EE),
+            Instruction::Exit => value(0x00FD),
+            Instruction::Sys(a) => addr(0x0, a),
+            Instruction::Jp(a) => addr(0x1, a),
+            Instruction::Call(a) => addr(0x2, a),
+            Instruction::SeVal(x, k) => xk(0x3, x, k),
+            Instruction::SneVal(x, k) => xk(0x4, x, k),
+            Instruction::SeReg(x, y) => xy(0x5, x, y, 0x0),
+            Instruction::LdVal(x, k) => xk(0x6, x, k),
+            Instruction::AddVal(x, k) => xk(0x7, x, k),
+            Instruction::LdReg(x, y) => xy(0x8, x, y, 0x0),
+            Instruction::Or(x, y) => xy(0x8, x, y, 0x1),
+            Instruction::And(x, y) => xy(0x8, x, y, 0x2),
+            Instruction::Xor(x, y) => xy(0x8, x, y, 0x3),
+            Instruction::AddReg(x, y) => xy(0x8, x, y, 0x4),
+            Instruction::Sub(x, y) => xy(0x8, x, y, 0x5),
+            Instruction::Shr(x, y) => xy(0x8, x, y, 0x6),
+            Instruction::Subn(x, y) => xy(0x8, x, y, 0x7),
+            Instruction::Shl(x, y) => xy(0x8, x, y, 0xE),
+            Instruction::SneReg(x, y) => xy(0x9, x, y, 0x0),
+            Instruction::LdI(a) => addr(0xA, a),
+            Instruction::JpOffset(a) => addr(0xB, a),
+            Instruction::Rnd(x, k) => xk(0xC, x, k),
+            Instruction::Drw(x, y, n) => xyn(0xD, x, y, n),
+            Instruction::Skp(x) => x(0xE, x, 0x9E),
+            Instruction::Sknp(x) => x(0xE, x, 0xA1),
+            Instruction::LdDtToReg(x) => x(0xF, x, 0x07),
+            Instruction::LdKey(x) => x(0xF, x, 0x0A),
+            Instruction::LdDt(x) => x(0xF, x, 0x15),
+            Instruction::LdSt(x) => x(0xF, x, 0x18),
+            Instruction::AddI(x) => x(0xF, x, 0x1E),
+            Instruction::LdF(x) => x(0xF, x, 0x29),
+            Instruction::LdB(x) => x(0xF, x, 0x33),
+            Instruction::LdContToMem(x) => x(0xF, x, 0x55),
+            Instruction::LdContFromMem(x) => x(0xF, x, 0x65),
         };
 
-        if let Some(x) = x_out {
-            debug_assert!(addr_out.is_none());
-            base |= (*x as u16) << 8;
-        }
+        debug_assert_eq!(self, &Self::decode(value).unwrap());
 
-        if let Some(y) = y_out {
-            debug_assert!(k_out.is_none());
-            debug_assert!(addr_out.is_none());
-
-            base |= (*y as u16) << 4;
-        }
-
-        if let Some(addr) = addr_out {
-            debug_assert!(y_out.is_none());
-            debug_assert!(x_out.is_none());
-            debug_assert!(k_out.is_none());
-            base |= addr.get() & 0xFFF;
-        }
-
-        if let Some(k_out) = k_out {
-            debug_assert!(y_out.is_none());
-            base |= *k_out as u16;
-        }
-
-        debug_assert_eq!(self, &Self::decode(base).unwrap());
-
-        base
+        value
     }
 
     pub fn decode(instr_val: u16) -> Option<Self> {
-        let addr = Address::new(instr_val & 0xFFF).unwrap();
+        let addr = Address::new_truncate(instr_val);
 
-        let x = Nibble::new(((instr_val & 0x0F00) >> 8) as u8).unwrap();
-        let y = Nibble::new(((instr_val & 0x00F0) >> 4) as u8).unwrap();
+        let x = Nibble::new_truncate(((instr_val & 0x0F00) >> 8) as u8);
+        let y = Nibble::new_truncate(((instr_val & 0x00F0) >> 4) as u8);
 
         let x = Register::from(x);
         let y = Register::from(y);
@@ -230,7 +271,7 @@ impl Instruction {
 
         let first_nibble = (instr_val & 0xF000) >> 12;
         let last = instr_val & 0x000F;
-        let last_nibble = Nibble::new(last as u8).unwrap();
+        let last_nibble = Nibble::new_truncate(instr_val as u8);
         let last_byte = (instr_val & 0xFF) as u8;
 
         let instr = if instr_val == 0x00E0 {
