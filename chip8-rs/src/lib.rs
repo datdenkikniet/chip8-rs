@@ -3,8 +3,9 @@ mod instruction;
 mod memory;
 mod register;
 
+pub use chip8_rs_common::*;
 pub use display::{Display, DisplayCoordinate};
-pub use instruction::{Address, Instruction, Nibble};
+pub use instruction::Instruction;
 pub use memory::Memory;
 pub use register::Register;
 

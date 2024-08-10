@@ -18,8 +18,23 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 name = "chip8-rs"
 version = "0.1.0"
 dependencies = [
+ "chip8-rs-common",
+ "chip8-rs-macros",
  "getrandom",
  "rand",
+]
+
+[[package]]
+name = "chip8-rs-common"
+version = "0.1.0"
+
+[[package]]
+name = "chip8-rs-macros"
+version = "0.1.0"
+dependencies = [
+ "chip8-rs-common",
+ "proc-macro2",
+ "syn",
 ]
 
 [[package]]

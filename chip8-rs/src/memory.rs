@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::instruction::Address;
+use crate::Address;
 
 pub trait Memory {
     fn get(&self, addr: Address) -> u8;
