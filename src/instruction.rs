@@ -161,3 +161,13 @@ gen_instructions2! {
     LdContToMem { x: Register } => x(0xF, x, 0x55),
     LdContFromMem { x: Register } => x(0xF, x, 0x65),
 }
+
+#[test]
+fn round_trip() {
+    for i in 0..u16::MAX {
+        if let Some(instr) = Instruction::decode(i) {
+            let encoded = instr.encode();
+            assert_eq!(encoded, i, "{:?}", instr);
+        }
+    }
+}
