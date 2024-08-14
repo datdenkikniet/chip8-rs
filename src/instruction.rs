@@ -35,7 +35,7 @@ macro_rules! decode {
     };
 
     ($ident:ident, $instr:expr, xy($v1:literal, $x:ident, $y:ident, $v2:literal)) => {
-        if (($instr >> 12) & 0xF) == ($v1 << 12) && ($instr & 0xF) == $v2 {
+        if (($instr >> 12) & 0xF) == $v1 && ($instr & 0xF) == $v2 {
             return Some(Instruction::$ident { $x: decode!(x($instr)), $y: decode!(y($instr)) });
         }
     };
@@ -162,12 +162,49 @@ gen_instructions2! {
     LdContFromMem { x: Register } => x(0xF, x, 0x65),
 }
 
-#[test]
-fn round_trip() {
-    for i in 0..u16::MAX {
-        if let Some(instr) = Instruction::decode(i) {
-            let encoded = instr.encode();
-            assert_eq!(encoded, i, "{:?}", instr);
+#[cfg(test)]
+mod test {
+    use super::Instruction::{self, *};
+    use crate::{Address, Nibble, Register::*};
+
+    #[test]
+    fn round_trip() {
+        for i in 0..u16::MAX {
+            if let Some(instr) = Instruction::decode(i) {
+                let encoded = instr.encode();
+                assert_eq!(encoded, i, "{:?}", instr);
+            }
         }
     }
+
+    macro_rules! decode {
+        ($name:ident, $value:literal, $expected:expr) => {
+            #[test]
+            pub fn $name() {
+                let decoded = Instruction::decode($value).unwrap();
+                assert_eq!(decoded, $expected, "{}: {:?}", $value, $expected);
+            }
+        };
+    }
+
+    decode!(value, 0x00E0, Cls);
+    decode!(
+        addr,
+        0x0100,
+        Sys {
+            address: Address::new_truncate(0x100)
+        }
+    );
+    decode!(xk, 0x3A44, SeVal { x: VA, k: 0x44 });
+    decode!(xy, 0x8514, AddReg { x: V5, y: V1 });
+    decode!(
+        xyn,
+        0xD123,
+        Drw {
+            x: V1,
+            y: V2,
+            n: Nibble::new_truncate(3)
+        }
+    );
+    decode!(x, 0xF455, LdContToMem { x: V4 });
 }
