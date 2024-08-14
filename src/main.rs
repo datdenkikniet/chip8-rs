@@ -70,12 +70,11 @@ fn exec(buffer: &[u8]) {
 
         display.draw();
 
-        if vm.decode_current_instr()
-            == Ok(Instruction::Jp {
-                address: Address::new_truncate(536),
-            })
-        {
-            break;
+        // Break on infinite loop
+        if let Ok(Instruction::Jp { address }) = vm.decode_current_instr() {
+            if address == vm.pc() {
+                break;
+            }
         }
 
         std::thread::sleep(std::time::Duration::from_millis(10));
