@@ -10,7 +10,6 @@ pub use instruction::Instruction;
 pub use memory::Memory;
 pub use register::Register;
 
-use rand::Rng;
 use register::RegisterFile;
 
 #[derive(Debug, PartialEq)]
@@ -27,6 +26,7 @@ pub struct Chip8<Mem, Display> {
     memory: Mem,
     display: Display,
     registers: RegisterFile,
+    rng_state: (u32, u32),
 }
 
 impl<MEM, DISPLAY> Chip8<MEM, DISPLAY> {
@@ -42,6 +42,10 @@ impl<Mem, Display> Chip8<Mem, Display>
 where
     Mem: Memory,
 {
+    pub fn seed_rng(&mut self, seed: (u32, u32)) {
+        self.rng_state = seed;
+    }
+
     pub fn new_skip_init(pc: Address, memory: Mem, display: Display) -> Self {
         let mut registers = RegisterFile::default();
         registers.set_pc(pc);
@@ -50,6 +54,7 @@ where
             memory,
             display,
             registers,
+            rng_state: (1, 1),
         }
     }
 
@@ -68,6 +73,22 @@ where
     pub fn pc(&self) -> Address {
         self.registers.pc()
     }
+
+    fn next_rand(state: &mut (u32, u32)) -> u8 {
+        let (v, u) = state;
+        *v = 36969 * (*v & 65535) + (*v >> 16);
+        *u = 18000 * (*u & 65535) + (*u >> 16);
+
+        if *u == 0 {
+            *u = 1;
+        }
+
+        if *v == 0 {
+            *v = 1;
+        }
+
+        return *u as u8;
+    }
 }
 
 impl<Mem, Display> Chip8<Mem, Display>
@@ -75,13 +96,15 @@ where
     Display: crate::Display,
     Mem: Memory,
 {
-    fn execute(
-        registers: &mut RegisterFile,
-        memory: &mut Mem,
-        instruction: Instruction,
-        display: &mut Display,
-    ) -> Result<bool, Error> {
+    fn execute(&mut self, instruction: Instruction) -> Result<bool, Error> {
         eprintln!("{:?}", instruction);
+
+        let Self {
+            memory,
+            display,
+            registers,
+            rng_state,
+        } = self;
 
         match instruction {
             Instruction::Sys { .. } => return Err(Error::SysInstr),
@@ -205,7 +228,8 @@ where
                 return Ok(true);
             }
             Instruction::Rnd { x, k } => {
-                registers.set(x, rand::thread_rng().gen::<u8>() & k);
+                let rand = Self::next_rand(rng_state);
+                registers.set(x, rand & k);
             }
             Instruction::Drw { x, y, n } => {
                 registers.set(Register::VF, 0);
@@ -262,15 +286,7 @@ where
 
     pub fn tick(&mut self) -> Result<bool, Error> {
         let instruction = self.decode_current_instr()?;
-
-        let Self {
-            memory,
-            display,
-            registers,
-            ..
-        } = self;
-
-        Self::execute(registers, memory, instruction, display)
+        self.execute(instruction)
     }
 }
 
@@ -278,9 +294,9 @@ impl<Memory, Display> Chip8<Memory, Display>
 where
     Memory: crate::Memory,
 {
-    pub fn decode_current_instr(&mut self) -> Result<Instruction, Error> {
+    pub fn decode_current_instr(&self) -> Result<Instruction, Error> {
         let pc = self.registers.pc().get() as usize;
-        let instr_data = self.memory.range_mut(pc..pc + 2);
+        let instr_data = self.memory.range(pc..pc + 2);
         let instr = u16::from_be_bytes(instr_data.try_into().expect("Always succeeds."));
         Instruction::decode(instr).ok_or(Error::Decode(instr))
     }

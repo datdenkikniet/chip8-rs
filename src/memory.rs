@@ -5,6 +5,7 @@ use crate::Address;
 pub trait Memory {
     fn get(&self, addr: Address) -> u8;
     fn set(&mut self, addr: Address, value: u8);
+    fn range(&self, range: Range<usize>) -> &[u8];
     fn range_mut(&mut self, range: Range<usize>) -> &mut [u8];
 }
 
@@ -23,6 +24,10 @@ where
     fn range_mut(&mut self, range: Range<usize>) -> &mut [u8] {
         <T as Memory>::range_mut(self, range)
     }
+
+    fn range(&self, range: Range<usize>) -> &[u8] {
+        <T as Memory>::range(self, range)
+    }
 }
 
 impl Memory for [u8; 4096] {
@@ -36,5 +41,9 @@ impl Memory for [u8; 4096] {
 
     fn range_mut(&mut self, range: Range<usize>) -> &mut [u8] {
         &mut self[range]
+    }
+
+    fn range(&self, range: Range<usize>) -> &[u8] {
+        &self[range]
     }
 }

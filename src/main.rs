@@ -49,6 +49,7 @@ fn main() {
 fn exec(buffer: &[u8]) {
     let display = FakeDisplay::new();
     let mut vm = Chip8::new([0u8; 4096], &display, &buffer);
+    vm.seed_rng((12, 34));
 
     loop {
         let res = vm.tick();
