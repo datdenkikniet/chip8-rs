@@ -1,7 +1,4 @@
-use crate::{
-    instruction::{Address, Nibble},
-    Error,
-};
+use crate::{Address, Error, Nibble};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]

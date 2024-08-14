@@ -1,10 +1,12 @@
+mod data;
 mod display;
 mod instruction;
 mod memory;
 mod register;
 
+pub use data::{Address, Nibble};
 pub use display::{Display, DisplayCoordinate};
-pub use instruction::{Address, Instruction, Nibble};
+pub use instruction::Instruction;
 pub use memory::Memory;
 pub use register::Register;
 
@@ -82,7 +84,7 @@ where
         eprintln!("{:?}", instruction);
 
         match instruction {
-            Instruction::Sys(_) => return Err(Error::SysInstr),
+            Instruction::Sys { .. } => return Err(Error::SysInstr),
             Instruction::Cls => display.clear_all(),
             Instruction::Ret => {
                 if registers.sp == 0x00 {
@@ -100,11 +102,11 @@ where
                 registers.set_pc_from(pc);
                 return Ok(true);
             }
-            Instruction::Jp(addr) => {
+            Instruction::Jp { address: addr } => {
                 registers.set_pc(addr);
                 return Ok(true);
             }
-            Instruction::Call(addr) => {
+            Instruction::Call { address: addr } => {
                 if registers.sp == 0xF {
                     return Err(Error::StackOverflow);
                 }
@@ -119,82 +121,82 @@ where
                 registers.set_pc(addr);
                 return Ok(true);
             }
-            Instruction::SeVal(x, k) => {
+            Instruction::SeVal { x, k } => {
                 if registers.get(x) == k {
                     registers.inc_pc()?;
                 }
             }
-            Instruction::SneVal(x, k) => {
+            Instruction::SneVal { x, k } => {
                 if registers.get(x) == k {
                     registers.inc_pc()?;
                 }
             }
-            Instruction::SeReg(x, y) => {
+            Instruction::SeReg { x, y } => {
                 if registers.get(x) == registers.get(y) {
                     registers.inc_pc()?;
                 }
             }
-            Instruction::LdVal(x, k) => registers.set(x, k),
-            Instruction::AddVal(x, k) => {
+            Instruction::LdVal { x, k } => registers.set(x, k),
+            Instruction::AddVal { x, k } => {
                 let v = registers.get(x);
                 registers.set(x, k.wrapping_add(v));
             }
-            Instruction::LdReg(x, y) => {
+            Instruction::LdReg { x, y } => {
                 let v = registers.get(y);
                 registers.set(x, v);
             }
-            Instruction::Or(x, y) => {
+            Instruction::Or { x, y } => {
                 let v1 = registers.get(y);
                 let v2 = registers.get(x);
                 registers.set(x, v1 | v2);
             }
-            Instruction::And(x, y) => {
+            Instruction::And { x, y } => {
                 let v1 = registers.get(y);
                 let v2 = registers.get(x);
                 registers.set(x, v1 & v2);
             }
-            Instruction::Xor(x, y) => {
+            Instruction::Xor { x, y } => {
                 let v1 = registers.get(y);
                 let v2 = registers.get(x);
                 registers.set(x, v1 ^ v2);
             }
-            Instruction::AddReg(x, y) => {
+            Instruction::AddReg { x, y } => {
                 let v1 = registers.get(y);
                 let v2 = registers.get(x);
                 registers.set(x, v1.wrapping_add(v2));
                 registers.set(Register::VF, v1.checked_add(v2).is_none() as u8);
             }
-            Instruction::Sub(x, y) => {
+            Instruction::Sub { x, y } => {
                 let v1 = registers.get(y);
                 let v2 = registers.get(x);
                 registers.set(x, v2.wrapping_sub(v1));
                 registers.set(Register::VF, v2.checked_sub(v1).is_none() as u8);
             }
-            Instruction::Shr(x, y) => {
+            Instruction::Shr { x, y } => {
                 let v = registers.get(y);
                 let vf = v & 0x1;
                 registers.set(x, v >> 1);
                 registers.set(Register::VF, vf);
             }
-            Instruction::Subn(x, y) => {
+            Instruction::Subn { x, y } => {
                 let v1 = registers.get(y);
                 let v2 = registers.get(x);
                 registers.set(x, v1.wrapping_sub(v2));
                 registers.set(Register::VF, v1.checked_sub(v2).is_none() as u8);
             }
-            Instruction::Shl(x, y) => {
+            Instruction::Shl { x, y } => {
                 let v = registers.get(y);
                 let vf = (v & 0x80) >> 7;
                 registers.set(x, v << 1);
                 registers.set(Register::VF, vf);
             }
-            Instruction::SneReg(x, y) => {
+            Instruction::SneReg { x, y } => {
                 if registers.get(x) != registers.get(y) {
                     registers.inc_pc()?;
                 }
             }
-            Instruction::LdI(addr) => registers.i = addr,
-            Instruction::JpOffset(offset) => {
+            Instruction::LdI { address: addr } => registers.i = addr,
+            Instruction::JpOffset { offset } => {
                 let reg_offset = registers.get(Register::V0);
                 // TODO: check overflow?
                 let pc = offset.get().wrapping_add(reg_offset as u16);
@@ -202,10 +204,10 @@ where
                 registers.set_pc(Address::new_truncate(pc));
                 return Ok(true);
             }
-            Instruction::Rnd(x, k) => {
+            Instruction::Rnd { x, k } => {
                 registers.set(x, rand::thread_rng().gen::<u8>() & k);
             }
-            Instruction::Drw(x, y, n) => {
+            Instruction::Drw { x, y, n } => {
                 registers.set(Register::VF, 0);
 
                 let mut addr = registers.i;
@@ -239,17 +241,17 @@ where
                     addr.add(1);
                 }
             }
-            Instruction::Skp(_) => todo!("skp"),
-            Instruction::Sknp(_) => todo!("sknp"),
-            Instruction::LdDtToReg(_) => todo!("lddttoreg"),
-            Instruction::LdKey(_) => todo!("ldkey"),
-            Instruction::LdDt(_) => todo!("lddt"),
-            Instruction::LdSt(_) => todo!("ldst"),
-            Instruction::AddI(x) => registers.i.add(registers.get(x)),
-            Instruction::LdF(_) => todo!("ldf"),
-            Instruction::LdB(_) => todo!("ldb"),
-            Instruction::LdContToMem(_) => todo!("ldconttomem"),
-            Instruction::LdContFromMem(_) => todo!("ldcontfrommem"),
+            Instruction::AddI { x } => registers.i.add(registers.get(x)),
+            Instruction::Skp { .. } => todo!("skp"),
+            Instruction::Sknp { .. } => todo!("sknp"),
+            Instruction::LdDtToReg { .. } => todo!("lddttoreg"),
+            Instruction::LdKey { .. } => todo!("ldkey"),
+            Instruction::LdDt { .. } => todo!("lddt"),
+            Instruction::LdSt { .. } => todo!("ldst"),
+            Instruction::LdF { .. } => todo!("ldf"),
+            Instruction::LdB { .. } => todo!("ldb"),
+            Instruction::LdContToMem { .. } => todo!("ldconttomem"),
+            Instruction::LdContFromMem { .. } => todo!("ldcontfrommem"),
             Instruction::Exit => return Ok(false),
         }
 

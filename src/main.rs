@@ -10,11 +10,23 @@ fn main() {
         const FIVE: Nibble = Nibble::new_truncate(5);
 
         let instr: Vec<_> = [
-            LdI(Address::new_truncate(0 * 5)),
-            Drw(V0, V0, FIVE),
-            LdI(Address::new_truncate(1 * 5)),
-            LdVal(V0, 8),
-            Drw(V0, V1, FIVE),
+            LdI {
+                address: Address::new_truncate(0 * 5),
+            },
+            Drw {
+                x: V0,
+                y: V0,
+                n: FIVE,
+            },
+            LdI {
+                address: Address::new_truncate(1 * 5),
+            },
+            LdVal { x: V0, k: 8 },
+            Drw {
+                x: V0,
+                y: V1,
+                n: FIVE,
+            },
             Exit,
         ]
         .into_iter()
@@ -57,7 +69,11 @@ fn exec(buffer: &[u8]) {
 
         display.draw();
 
-        if vm.decode_current_instr() == Ok(Instruction::Jp(Address::new_truncate(536))) {
+        if vm.decode_current_instr()
+            == Ok(Instruction::Jp {
+                address: Address::new_truncate(536),
+            })
+        {
             break;
         }
 
