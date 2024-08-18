@@ -178,33 +178,42 @@ mod test {
     }
 
     macro_rules! decode {
-        ($name:ident, $value:literal, $expected:expr) => {
-            #[test]
-            pub fn $name() {
-                let decoded = Instruction::decode($value).unwrap();
-                assert_eq!(decoded, $expected, "{}: {:?}", $value, $expected);
-            }
+        ($([$value:literal, $name:ident, $expected:expr]$(,)?)*) => {
+            $(
+                #[test]
+                pub fn $name() {
+                    let decoded = Instruction::decode($value).unwrap();
+                    assert_eq!(decoded, $expected, "{}: {:?}", $value, $expected);
+                }
+            )*
         };
     }
 
-    decode!(value, 0x00E0, Cls);
+    fn a(value: u16) -> Address {
+        Address::new_truncate(value)
+    }
+
+    fn n(value: u8) -> Nibble {
+        Nibble::new_truncate(value)
+    }
+
+    #[rustfmt::skip]
     decode!(
-        addr,
-        0x0100,
-        Sys {
-            address: Address::new_truncate(0x100)
-        }
+        // Basic types
+        [0x00E0, value, Cls],
+        [0x0100, addr, Sys { address: a(0x100) }],
+        [0x3A44, xk, SeVal { x: VA, k: 0x44 }],
+        [0x8514, xy, AddReg { x: V5, y: V1 }],
+        [0xD123, xyn, Drw { x: V1, y: V2, n: n(3) }],
+        [0xF455, x, LdContToMem { x: V4 }],
+
+        // All instructions
+        [0x00E0, cls, Cls],
+        [0x00EE, ret, Ret],
+        [0x00FD, exit, Exit],
+        [0x0123, sys, Sys { address: a(0x123) }]
+        [0x1341, jmp, Jp { address: a(0x341) }]
+        [0x2336, call, Call { address: a(0x336) }]
+        [0x3888, seval, SeVal { x: V8, k: 0x88 }]
     );
-    decode!(xk, 0x3A44, SeVal { x: VA, k: 0x44 });
-    decode!(xy, 0x8514, AddReg { x: V5, y: V1 });
-    decode!(
-        xyn,
-        0xD123,
-        Drw {
-            x: V1,
-            y: V2,
-            n: Nibble::new_truncate(3)
-        }
-    );
-    decode!(x, 0xF455, LdContToMem { x: V4 });
 }
